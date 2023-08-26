@@ -1,0 +1,13 @@
+mkdir dev
+cat <<EOF > dev/kustomization.yaml
+bases:
+- ../base
+namePrefix: dev-
+EOF
+
+mkdir prod
+cat <<EOF > prod/kustomization.yaml
+bases:
+- ../base
+namePrefix: prod-
+EOF

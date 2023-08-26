@@ -1,0 +1,19 @@
+apiVersion: batch/v1beta1
+# API group的版本是v1beat1,这里不要写错
+kind: CronJob
+metadata:
+  name: batch-job-every-fifteen-minutes
+spec:
+# 该任务将会在每小时的0，15，30，45分运行
+  schedule: "0,15,30,45 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: periodic-batch-job-every-fifteen-minutes
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: main
+            image: luksa/batch-job

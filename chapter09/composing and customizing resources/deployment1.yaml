@@ -1,0 +1,56 @@
+# Create a deployment.yaml file
+cat <<EOF > deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx
+spec:
+  selector:
+    matchLabels:
+      run: my-nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: my-nginx
+    spec:
+      containers:
+      - name: my-nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+EOF
+
+# Create a patch increase_replicas.yaml
+cat <<EOF > increase_replicas.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx
+spec:
+  replicas: 3
+EOF
+
+# Create another patch set_memory.yaml
+cat <<EOF > set_memory.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx
+spec:
+  template:
+    spec:
+      containers:
+      - name: my-nginx
+        resources:
+        limits:
+          memory: 512Mi
+EOF
+
+cat <<EOF >./kustomization.yaml
+resources:
+- deployment.yaml
+patchesStrategicMerge:
+- increase_replicas.yaml
+- set_memory.yaml
+EOF

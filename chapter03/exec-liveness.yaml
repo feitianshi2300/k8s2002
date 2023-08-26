@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    test: liveness
+  name: liveness-exec
+spec:
+  containers:
+  - name: liveness  # 使用liveness的方式进行健康探测
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 600  # 由于这里创建一个文件后，5秒钟后又把文件删除，所以5分钟后探测应处于失败状态
+    livenessProbe:
+      exec:  # 执行如下命令行，如果返回结果的状态码为0，证明探测成功，否则证明失败。执行重启策略，默认为always.
+        command:
+        - cat
+        - /tmp/healthy
+      initialDelaySeconds: 5   # 第一次探测在等待容器启动后多少秒开启执行，此处设置为5秒。
+      periodSeconds: 5  # 设置多长时间探测一次，这里设置为5秒。

@@ -1,0 +1,232 @@
+--------------------------------------------------------------
+1. 准备工具如下
+（1）证书管理工具
+- cfssl
+- cfssljson
+
+（2）etcd软件
+etcd-v3.3.5-linux-amd64.tar.gz
+
+--------------------------------------------------------------
+
+2. 对证书管理工具添加可执行权限并复制到相对应的目录
+$ chmod +x cfssl cfssljson
+$ sudo mv cfssl cfssljson /usr/local/bin/
+
+（2）校验cfssl和cfssljson工具
+$ cfssl version
+Version: 1.3.4
+Revision: dev
+Runtime: go1.13
+
+$ cfssljson --version
+Version: 1.3.4
+Revision: dev
+Runtime: go1.13
+
+--------------------------------------------------------------------
+3. 为etcd服务器签发证书
+
+（1）产生CA配置文件，证书和私有密钥
+# cat > ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "8760h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": ["signing", "key encipherment", "server auth", "client auth"],
+        "expiry": "8760h"
+      }
+    }
+  }
+}
+EOF
+
+# cat > ca-csr.json <<EOF
+{
+  "CN": "CN",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "ShangHai",
+      "O": "Xiodi",
+      "OU": "CA",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+# cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+
+(2) 产生etcd证书
+{
+
+
+
+KUBERNETES_HOSTNAMES=kubernetes,kubernetes.default,kubernetes.default.svc,kubernetes.default.svc.cluster,kubernetes.svc.cluster.local,c720111.xiodi.cn,c720112.xiodi.cn,c720113.xiodi.cn
+
+cat > etcd-csr.json <<EOF
+{
+  "CN": "CN",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "ShangHai",
+      "O": "Xiodi",
+      "OU": "CA",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -hostname=10.32.0.1,192.168.20.111,192.168.20.112,192.168.20.113,192.168.20.116,127.0.0.1,${KUBERNETES_HOSTNAMES} \
+  -profile=kubernetes \
+  etcd-csr.json | cfssljson -bare etcd
+
+}
+
+------------------------------------------------------------------------------------------------------------------------
+
+4. 启动etcd的集群
+
+（1）在三个etcd服务器上均执行如下配置
+
+$ tar -xvf etcd-v3.3.5-linux-amd64.tar.gz
+
+$ mv etcd-v3.3.5-linux-amd64/etcd* /usr/local/bin/
+
+$ mkdir -p /etc/etcd /var/lib/etcd
+$ cp ca.pem etcd-key.pem etcd.pem /etc/etcd/
+
+（2）创建etcd服务文件
+
+- c720111.xiodi.cn配置如下：
+cat <<EOF | sudo tee /etc/systemd/system/etcd.service
+[Unit]
+Description=etcd
+Documentation=https://github.com/coreos
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/etcd \\
+  --name c720111.xiodi.cn \\
+  --cert-file=/etc/etcd/etcd.pem \\
+  --key-file=/etc/etcd/etcd-key.pem \\
+  --peer-cert-file=/etc/etcd/etcd.pem \\
+  --peer-key-file=/etc/etcd/etcd-key.pem \\
+  --trusted-ca-file=/etc/etcd/ca.pem \\
+  --peer-trusted-ca-file=/etc/etcd/ca.pem \\
+  --peer-client-cert-auth \\
+  --client-cert-auth \\
+  --initial-advertise-peer-urls https://192.168.20.111:2380 \\
+  --listen-peer-urls https://192.168.20.111:2380 \\
+  --listen-client-urls https://192.168.20.111:2379,https://127.0.0.1:2379 \\
+  --advertise-client-urls https://192.168.20.111:2379 \\
+  --initial-cluster-token etcd-cluster-0 \\
+  --initial-cluster c720111.xiodi.cn=https://192.168.20.111:2380,c720112.xiodi.cn=https://192.168.20.112:2380,c720113.xiodi.cn=https://192.168.20.113:2380 \\
+  --initial-cluster-state new \\
+  --data-dir=/var/lib/etcd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+- c720112.xiodi.cn配置文件如下
+cat <<EOF | sudo tee /etc/systemd/system/etcd.service
+[Unit]
+Description=etcd
+Documentation=https://github.com/coreos
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/etcd \\
+  --name c720112.xiodi.cn \\
+  --cert-file=/etc/etcd/etcd.pem \\
+  --key-file=/etc/etcd/etcd-key.pem \\
+  --peer-cert-file=/etc/etcd/etcd.pem \\
+  --peer-key-file=/etc/etcd/etcd-key.pem \\
+  --trusted-ca-file=/etc/etcd/ca.pem \\
+  --peer-trusted-ca-file=/etc/etcd/ca.pem \\
+  --peer-client-cert-auth \\
+  --client-cert-auth \\
+  --initial-advertise-peer-urls https://192.168.20.112:2380 \\
+  --listen-peer-urls https://192.168.20.112:2380 \\
+  --listen-client-urls https://192.168.20.112:2379,https://127.0.0.1:2379 \\
+  --advertise-client-urls https://192.168.20.112:2379 \\
+  --initial-cluster-token etcd-cluster-0 \\
+  --initial-cluster c720111.xiodi.cn=https://192.168.20.111:2380,c720112.xiodi.cn=https://192.168.20.112:2380,c720113.xiodi.cn=https://192.168.20.113:2380 \\
+  --initial-cluster-state new \\
+  --data-dir=/var/lib/etcd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+- c720113.xiodi.cn配置文件如下
+cat <<EOF | sudo tee /etc/systemd/system/etcd.service
+[Unit]
+Description=etcd
+Documentation=https://github.com/coreos
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/etcd \\
+  --name c720113.xiodi.cn \\
+  --cert-file=/etc/etcd/etcd.pem \\
+  --key-file=/etc/etcd/etcd-key.pem \\
+  --peer-cert-file=/etc/etcd/etcd.pem \\
+  --peer-key-file=/etc/etcd/etcd-key.pem \\
+  --trusted-ca-file=/etc/etcd/ca.pem \\
+  --peer-trusted-ca-file=/etc/etcd/ca.pem \\
+  --peer-client-cert-auth \\
+  --client-cert-auth \\
+  --initial-advertise-peer-urls https://192.168.20.113:2380 \\
+  --listen-peer-urls https://192.168.20.113:2380 \\
+  --listen-client-urls https://192.168.20.113:2379,https://127.0.0.1:2379 \\
+  --advertise-client-urls https://192.168.20.113:2379 \\
+  --initial-cluster-token etcd-cluster-0 \\
+  --initial-cluster c720111.xiodi.cn=https://192.168.20.111:2380,c720112.xiodi.cn=https://192.168.20.112:2380,c720113.xiodi.cn=https://192.168.20.113:2380 \\
+  --initial-cluster-state new \\
+  --data-dir=/var/lib/etcd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+5. 把主机名添加到/etc/hosts文件中
+
+----------------------------------------------------------------------------------------------------------------
+6. 启动etcd服务器
+systemctl daemon-reload
+systemctl enable etcd
+systemctl start etcd
+
+-----------------------------------------------------------------------------------------------------------------
+7. 使用以下命令校验结果
+ETCDCTL_API=3 etcdctl member list \
+ --endpoints=https://127.0.0.1:2379 \
+ --cacert=/etc/etcd/ca.pem \
+ --cert=/etc/etcd/etcd.pem \
+ --key=/etc/etcd/etcd-key.pem

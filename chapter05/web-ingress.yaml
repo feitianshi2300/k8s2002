@@ -1,0 +1,15 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: simple-fanout-example
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: web.xiodi.cn
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: web-apache
+          servicePort: 80
